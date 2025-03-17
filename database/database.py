@@ -1,8 +1,16 @@
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from dotenv import load_dotenv
 
-DATABASE_URL = "postgresql://postgres:mate1234@localhost:5432/simposio"  #
+# 🔹 Cargar las variables del archivo .env
+load_dotenv()
+
+# 🔹 Obtener la URL de la BD desde la variable de entorno
+DATABASE_URL = os.getenv("DATABASE_URL")
+#
+
 
 # Crear el motor de conexión a la base de datos
 engine = create_engine(DATABASE_URL)
