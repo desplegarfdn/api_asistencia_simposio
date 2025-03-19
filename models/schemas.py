@@ -55,3 +55,14 @@ class UsuarioSchema(BaseModel):
 
     class Config:
         from_attributes = True
+
+class LogSchema(BaseModel):
+    usuario_id: int
+    username: str
+    endpoint: str
+    metodo: str
+    mensaje: str
+    fecha: datetime
+
+    class Config:
+        from_attributes = True

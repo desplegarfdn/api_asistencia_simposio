@@ -6,22 +6,22 @@ from database.database import get_db
 from sqlalchemy import func
 from models.schemas import AsistenciaSchema
 from repository.asistencia_repository import AsistenciaRepositoryImpl
+from repository.log_repository import LogRepositoryImpl
 from service.asistencia_service import AsistenciaService
 from models.models import Asistencia, Alumno, Maestro
+from service.log_service import LogService
 
 router = APIRouter()
 
-
-@router.post("/entrada", response_model=AsistenciaSchema)
+@router.post("/entrada", response_model=dict)
 def registrar_entrada(persona_id: str, db: Session = Depends(get_db),
                       current_user: dict = Depends(get_current_user)):
     if current_user.role not in ["admin", "capturista"]:
         raise HTTPException(status_code=403, detail="No tienes permisos para registrar asistencia")
 
-    # 🔹 Buscar si el usuario tiene una asistencia sin salida
     asistencia_pendiente = db.query(Asistencia).filter(
         Asistencia.persona_id == persona_id,
-        Asistencia.fecha_salida == None  # Filtramos si no tiene salida
+        Asistencia.fecha_salida == None
     ).first()
 
     if asistencia_pendiente:
@@ -30,29 +30,43 @@ def registrar_entrada(persona_id: str, db: Session = Depends(get_db),
             detail="El usuario ya tiene una asistencia activa sin salida registrada."
         )
 
-    # 🔹 Buscar si es alumno o maestro
     alumno = db.query(Alumno).filter(Alumno.matricula == persona_id).first()
     if alumno:
         tipo_persona = "alumno"
+        nombre_completo = f"{alumno.nombre} {alumno.apellido_p} {alumno.apellido_m}"
     else:
         maestro = db.query(Maestro).filter(Maestro.numero_plaza == persona_id).first()
         if maestro:
             tipo_persona = "maestro"
+            nombre_completo = f"{maestro.nombre} {maestro.apellido_p} {maestro.apellido_m}"
         else:
             raise HTTPException(status_code=404, detail="Persona no encontrada en alumnos o maestros")
 
-    # 🔹 Obtener la hora actual en GMT-6
     hora_actual = datetime.utcnow() - timedelta(hours=6)
 
-    # 🔹 Registrar la asistencia
     service = AsistenciaService(AsistenciaRepositoryImpl(db))
-    nueva_asistencia = service.registrar_entrada(persona_id=persona_id, tipo_persona=tipo_persona,
-                                                 fecha_entrada=hora_actual)
+    nueva_asistencia = service.registrar_entrada(persona_id=persona_id, tipo_persona=tipo_persona, fecha_entrada=hora_actual)
 
-    return nueva_asistencia
+    # 🔹 Registrar log de actividad
+    log_service = LogService(LogRepositoryImpl(db))
+    log_service.registrar_log(
+        usuario_id=current_user.id,
+        username=current_user.username,
+        endpoint="/entrada",
+        metodo="POST",
+        mensaje=f"Registró la entrada de ({persona_id})"
+    )
+
+    return {
+        "id": nueva_asistencia.id,
+        "persona_id": persona_id,
+        "tipo_persona": tipo_persona,
+        "nombre_completo": nombre_completo,
+        "fecha_entrada": nueva_asistencia.fecha_entrada
+    }
 
 
-@router.post("/salida", response_model=AsistenciaSchema)
+@router.post("/salida", response_model=dict)
 def registrar_salida(persona_id: str, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     if current_user.role not in ["admin", "capturista"]:
         raise HTTPException(status_code=403, detail="No tienes permisos para registrar salida")
@@ -63,7 +77,34 @@ def registrar_salida(persona_id: str, db: Session = Depends(get_db), current_use
     if not asistencia:
         raise HTTPException(status_code=404, detail="No se encontró asistencia registrada para esta persona")
 
-    return asistencia
+    alumno = db.query(Alumno).filter(Alumno.matricula == persona_id).first()
+    if alumno:
+        nombre_completo = f"{alumno.nombre} {alumno.apellido_p} {alumno.apellido_m}"
+    else:
+        maestro = db.query(Maestro).filter(Maestro.numero_plaza == persona_id).first()
+        if maestro:
+            nombre_completo = f"{maestro.nombre} {maestro.apellido_p} {maestro.apellido_m}"
+        else:
+            raise HTTPException(status_code=404, detail="Persona no encontrada en alumnos o maestros")
+
+    # 🔹 Registrar log de actividad
+    log_service = LogService(LogRepositoryImpl(db))
+    log_service = LogService(LogRepositoryImpl(db))
+    log_service.registrar_log(
+        usuario_id=current_user.id,
+        username=current_user.username,
+        endpoint="/salida",
+        metodo="POST",
+        mensaje=f"Registró la salida de ({persona_id})"
+    )
+
+    return {
+        "id": asistencia.id,
+        "persona_id": persona_id,
+        "tipo_persona": asistencia.tipo_persona,
+        "nombre_completo": nombre_completo,
+        "fecha_salida": asistencia.fecha_salida
+    }
 
 
 @router.get("/buscar/{persona_id}", response_model=AsistenciaSchema)

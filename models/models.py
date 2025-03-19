@@ -49,3 +49,14 @@ class Usuario(Base):
     apellido_paterno = Column(String)
     apellido_materno = Column(String)
     role= Column(String)
+
+class LogActividad(Base):
+    __tablename__ = "logs_actividad"
+
+    id = Column(Integer, primary_key=True, index=True)
+    usuario_id = Column(Integer, ForeignKey("usuarios.id"))
+    username = Column(String, index=True)
+    endpoint = Column(String)
+    metodo = Column(String)  # GET, POST, PUT, DELETE
+    mensaje = Column(String)  # Descripción de la acción
+    fecha = Column(DateTime, default=datetime.utcnow)
