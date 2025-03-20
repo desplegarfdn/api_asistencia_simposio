@@ -399,3 +399,30 @@ def reporte_faltantes_evento(
         "total_asistentes": total_asistentes,
         "total_faltantes": total_faltantes
     }
+
+@router.get("/reporte/faltantes-salida/hoy")
+def reporte_faltantes_salida_hoy(
+        db: Session = Depends(get_db),
+        current_user: dict = Depends(get_current_user)
+):
+    if current_user.role not in ["admin", "capturista"]:
+        raise HTTPException(status_code=403, detail="No tienes permisos para ver reportes")
+
+    # Obtener la fecha actual en GMT-6
+    hoy = datetime.utcnow() - timedelta(hours=6)
+    fecha_inicio = hoy.replace(hour=0, minute=0, second=0)
+    fecha_fin = hoy.replace(hour=23, minute=59, second=59)
+
+    # Contar alumnos que registraron entrada hoy pero no salida
+    total_faltantes = db.query(func.count(func.distinct(Asistencia.persona_id))).join(
+        Alumno, Alumno.matricula == Asistencia.persona_id
+    ).filter(
+        Asistencia.fecha_entrada >= fecha_inicio,
+        Asistencia.fecha_entrada <= fecha_fin,
+        Asistencia.fecha_salida.is_(None)  # Solo aquellos que aún no registraron salida
+    ).scalar()
+
+    return {
+        "fecha": hoy.strftime("%Y-%m-%d"),
+        "total_faltantes": total_faltantes
+    }
