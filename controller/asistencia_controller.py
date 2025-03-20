@@ -278,3 +278,124 @@ def asistentes_tiempo_real(
         "carrera": carrera if carrera else "Todas",
         "total_asistentes": asistentes
     }
+
+@router.get("/reporte/genero/hoy")
+def reporte_asistencia_genero_hoy(
+        db: Session = Depends(get_db),
+        current_user: dict = Depends(get_current_user)
+):
+    if current_user.role not in ["admin", "capturista"]:
+        raise HTTPException(status_code=403, detail="No tienes permisos para ver reportes")
+
+    # Obtener la fecha actual en GMT-6
+    hoy = datetime.utcnow() - timedelta(hours=6)
+    fecha_inicio = hoy.replace(hour=0, minute=0, second=0)
+    fecha_fin = hoy.replace(hour=23, minute=59, second=59)
+
+    # Contar asistentes hombres del día actual
+    hombres = db.query(func.count(func.distinct(Asistencia.persona_id))).join(
+        Alumno, Alumno.matricula == Asistencia.persona_id
+    ).filter(
+        Alumno.genero == "Masculino",
+        Asistencia.fecha_entrada >= fecha_inicio,
+        Asistencia.fecha_entrada <= fecha_fin
+    ).scalar()
+
+    # Contar asistentes mujeres del día actual
+    mujeres = db.query(func.count(func.distinct(Asistencia.persona_id))).join(
+        Alumno, Alumno.matricula == Asistencia.persona_id
+    ).filter(
+        Alumno.genero == "Femenino",
+        Asistencia.fecha_entrada >= fecha_inicio,
+        Asistencia.fecha_entrada <= fecha_fin
+    ).scalar()
+
+    return {
+        "fecha": hoy.strftime("%Y-%m-%d"),
+        "total_hombres": hombres,
+        "total_mujeres": mujeres
+    }
+
+@router.get("/reporte/total-carrera/hoy")
+def reporte_total_asistencia_carrera_hoy(
+        db: Session = Depends(get_db),
+        current_user: dict = Depends(get_current_user)
+):
+    if current_user.role not in ["admin", "capturista"]:
+        raise HTTPException(status_code=403, detail="No tienes permisos para ver reportes")
+
+    # Obtener la fecha actual en GMT-6
+    hoy = datetime.utcnow() - timedelta(hours=6)
+    fecha_inicio = hoy.replace(hour=0, minute=0, second=0)
+    fecha_fin = hoy.replace(hour=23, minute=59, second=59)
+
+    # Consulta para obtener asistencia del día actual agrupada por carrera
+    resultados = db.query(
+        Alumno.carrera,
+        func.count(func.distinct(Asistencia.persona_id))
+    ).join(
+        Alumno, Alumno.matricula == Asistencia.persona_id
+    ).filter(
+        Asistencia.fecha_entrada >= fecha_inicio,
+        Asistencia.fecha_entrada <= fecha_fin
+    ).group_by(
+        Alumno.carrera
+    ).all()
+
+    return {
+        "fecha": hoy.strftime("%Y-%m-%d"),
+        "detalle": [{"carrera": carrera, "total_asistentes": total} for carrera, total in resultados]
+    }
+
+@router.get("/reporte/faltantes-salida")
+def reporte_faltantes_salida(
+        db: Session = Depends(get_db),
+        current_user: dict = Depends(get_current_user)
+):
+    if current_user.role not in ["admin", "capturista"]:
+        raise HTTPException(status_code=403, detail="No tienes permisos para ver reportes")
+
+    # Contar alumnos que no han registrado su salida
+    total_faltantes = db.query(func.count(func.distinct(Asistencia.persona_id))).join(
+        Alumno, Alumno.matricula == Asistencia.persona_id
+    ).filter(
+        Asistencia.fecha_salida.is_(None)  # Filtra los que no tienen salida registrada
+    ).scalar()
+
+    return {
+        "total_faltantes": total_faltantes
+    }
+
+@router.get("/reporte/faltantes-evento")
+def reporte_faltantes_evento(
+        fecha: datetime = Query(..., description="Formato: YYYY-MM-DD"),
+        db: Session = Depends(get_db),
+        current_user: dict = Depends(get_current_user)
+):
+    if current_user.role not in ["admin", "capturista"]:
+        raise HTTPException(status_code=403, detail="No tienes permisos para ver reportes")
+
+    # Obtener la fecha exacta en GMT-6
+    fecha_inicio = fecha.replace(hour=0, minute=0, second=0)
+    fecha_fin = fecha.replace(hour=23, minute=59, second=59)
+
+    # Contar el total de alumnos registrados en la base de datos
+    total_alumnos = db.query(func.count(Alumno.matricula)).scalar()
+
+    # Contar el número de alumnos que asistieron ese día
+    total_asistentes = db.query(func.count(func.distinct(Asistencia.persona_id))).join(
+        Alumno, Alumno.matricula == Asistencia.persona_id
+    ).filter(
+        Asistencia.fecha_entrada >= fecha_inicio,
+        Asistencia.fecha_entrada <= fecha_fin
+    ).scalar()
+
+    # Calcular los alumnos que faltaron
+    total_faltantes = total_alumnos - total_asistentes
+
+    return {
+        "fecha": fecha.strftime("%Y-%m-%d"),
+        "total_alumnos": total_alumnos,
+        "total_asistentes": total_asistentes,
+        "total_faltantes": total_faltantes
+    }
