@@ -1,5 +1,4 @@
-from typing import List, Tuple, Any
-
+from typing import List, Tuple, Any, Dict
 from sqlalchemy import Row
 from sqlalchemy.sql import func
 from sqlalchemy.orm import Session
@@ -27,8 +26,8 @@ class LogRepositoryImpl(LogRepository):
     def obtener_logs(self):
         return self.db.query(LogActividad).all()
 
-    def contar_registros_por_usuario(self) -> list[Row[tuple[Any, Any, Any]]]:
-        return (
+    def contar_registros_por_usuario(self) -> List[Dict[str, Any]]:
+        resultados: List[Row] = (
             self.db.query(
                 LogActividad.username,
                 func.count().filter(LogActividad.endpoint == "/entrada").label("total_entradas"),
@@ -37,3 +36,13 @@ class LogRepositoryImpl(LogRepository):
             .group_by(LogActividad.username)
             .all()
         )
+
+        # Convertir resultados a una lista de diccionarios
+        return [
+            {
+                "username": row[0],
+                "total_entradas": row[1] if row[1] is not None else 0,
+                "total_salidas": row[2] if row[2] is not None else 0
+            }
+            for row in resultados
+        ]

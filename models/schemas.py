@@ -66,3 +66,8 @@ class LogSchema(BaseModel):
 
     class Config:
         from_attributes = True
+
+class LogCountSchema(BaseModel):
+    username: str
+    total_entradas: int
+    total_salidas: int

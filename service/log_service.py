@@ -1,4 +1,4 @@
-from typing import List, Dict
+from typing import List, Dict, Any
 from repository.log_repository import LogRepository
 
 class LogService:
@@ -11,6 +11,5 @@ class LogService:
     def obtener_logs(self):
         return self.log_repo.obtener_logs()
 
-    def contar_registros_por_usuario(self) -> List[Dict[str, int]]:
-        registros = self.log_repo.contar_registros_por_usuario()
-        return [{"username": r[0], "total_entradas": r[1], "total_salidas": r[2]} for r in registros]
+    def contar_registros_por_usuario(self) -> List[Dict[str, Any]]:
+        return self.log_repo.contar_registros_por_usuario()
